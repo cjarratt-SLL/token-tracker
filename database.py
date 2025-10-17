@@ -1,22 +1,35 @@
-﻿# database.py
-from sqlmodel import SQLModel, Session, create_engine
+﻿from sqlmodel import create_engine, SQLModel, Session
+from dotenv import load_dotenv
+import os
 
-DATABASE_URL = "sqlite:///./database.db"
+# ------------------------------------------------------
+# Load environment variables
+# ------------------------------------------------------
+load_dotenv()
 
-# Create the database engine
-engine = create_engine(DATABASE_URL, echo=True)
+# Get your Supabase database URL
+DATABASE_URL = os.getenv("DATABASE_URL")
 
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL not found. Please set it in your .env file.")
+
+# ------------------------------------------------------
+# Create the SQLAlchemy engine
+# ------------------------------------------------------
+# echo=False keeps logs quiet; set to True for debugging
+engine = create_engine(DATABASE_URL, echo=False)
+
+
+# ------------------------------------------------------
+# Initialize the database (creates tables if missing)
+# ------------------------------------------------------
 def init_db():
-    """
-    Initialize the database by creating all tables from SQLModel metadata.
-    Called automatically on app startup.
-    """
     SQLModel.metadata.create_all(engine)
 
-# ✅ Correct FastAPI dependency for a working Session
+
+# ------------------------------------------------------
+# Dependency for FastAPI to get a database session
+# ------------------------------------------------------
 def get_session():
-    session = Session(engine)
-    try:
+    with Session(engine) as session:
         yield session
-    finally:
-        session.close()

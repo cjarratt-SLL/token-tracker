@@ -3,10 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 from typing import List
 from datetime import timezone
+from datetime import datetime, timezone
+from fastapi import Body
 from contextlib import asynccontextmanager
 from database import get_session, init_db
-from models import (Resident, Goal, Transaction, TransactionCreate, TransactionRead,ResidentUpdate, GoalUpdate, TransactionUpdate
-)
+from models import (Resident, Goal, Transaction, TransactionCreate, TransactionRead, ResidentUpdate, GoalUpdate, TransactionUpdate)
 
 # ------------------------------
 # Proper FastAPI + CORS setup
@@ -41,14 +42,14 @@ app.add_middleware(
 # ------------------------------
 # Resident endpoints
 # ------------------------------
-@app.post("/residents/", response_model=Resident, summary="Create a new resident")
+@app.post("/resident/", response_model=Resident, summary="Create a new resident")
 def create_resident(resident: Resident, session: Session = Depends(get_session)):
     session.add(resident)
     session.commit()
     session.refresh(resident)
     return resident
 
-@app.get("/residents/", response_model=List[Resident], summary="List all residents")
+@app.get("/resident/", response_model=List[Resident], summary="List all residents")
 def list_residents(session: Session = Depends(get_session)):
     residents = session.exec(select(Resident)).all()
     return residents
@@ -58,7 +59,7 @@ def list_residents(session: Session = Depends(get_session)):
 # ------------------------------
 
 
-@app.put("/residents/{resident_id}", response_model=Resident, summary="Update a resident (partial)")
+@app.put("/resident/{resident_id}", response_model=Resident, summary="Update a resident (partial)")
 def update_resident(
     resident_id: int,
     updated_data: ResidentUpdate,
@@ -78,7 +79,7 @@ def update_resident(
     return resident
 
 
-@app.delete("/residents/{resident_id}", summary="Delete a resident")
+@app.delete("/resident/{resident_id}", summary="Delete a resident")
 def delete_resident(
     resident_id: int = Path(..., description="ID of the resident to delete"),
     session: Session = Depends(get_session)
@@ -96,14 +97,14 @@ def delete_resident(
 # ------------------------------
 # Goal endpoints
 # ------------------------------
-@app.post("/goals/", response_model=Goal, summary="Create a new goal")
+@app.post("/goal/", response_model=Goal, summary="Create a new goal")
 def create_goal(goal: Goal, session: Session = Depends(get_session)):
     session.add(goal)
     session.commit()
     session.refresh(goal)
     return goal
 
-@app.get("/goals/", response_model=List[Goal], summary="List all goals")
+@app.get("/goal/", response_model=List[Goal], summary="List all goals")
 def list_goals(session: Session = Depends(get_session)):
     goals = session.exec(select(Goal)).all()
     return goals
@@ -111,7 +112,7 @@ def list_goals(session: Session = Depends(get_session)):
 # ------------------------------
 # Goal Update/Delete endpoints
 # ------------------------------
-@app.put("/goals/{goal_id}", response_model=Goal, summary="Update a goal (partial)")
+@app.put("/goal/{goal_id}", response_model=Goal, summary="Update a goal (partial)")
 def update_goal(
     goal_id: int,
     updated_data: GoalUpdate,
@@ -130,7 +131,7 @@ def update_goal(
     session.refresh(goal)
     return goal
 
-@app.delete("/goals/{goal_id}", summary="Delete a goal")
+@app.delete("/goal/{goal_id}", summary="Delete a goal")
 def delete_goal(goal_id: int, session: Session = Depends(get_session)):
     goal = session.get(Goal, goal_id)
     if not goal:
@@ -142,65 +143,175 @@ def delete_goal(goal_id: int, session: Session = Depends(get_session)):
 # ------------------------------
 # Transaction endpoints
 # ------------------------------
-@app.post("/transactions/", response_model=TransactionRead, summary="Create a new transaction")
-def create_transaction(transaction_in: TransactionCreate, session: Session = Depends(get_session)):
-    # Ensure timestamp is always UTC
-    if transaction_in.timestamp:
-        timestamp_utc = transaction_in.timestamp.astimezone(timezone.utc)
+@app.post("/transaction/", response_model=TransactionRead, summary="Create a new transaction")
+def create_transaction(
+    transaction_in: TransactionCreate = Body(...),
+    session: Session = Depends(get_session),
+):
+    """
+    Create a new transaction (award or deduct tokens) and update the resident's balance.
+
+    Rules:
+    - resident_id must exist.
+    - goal_id is optional; if provided, it must exist.
+    - timestamp is optional; if omitted, it is set to current UTC with 'Z'.
+    - All timestamps are stored/returned in UTC.
+    - If goal_id is provided:
+        * Points default to goal.points
+        * If a custom value is used, mark override_points=True
+    """
+    # 1) Validate resident
+    resident = session.get(Resident, transaction_in.resident_id)
+    if not resident:
+        raise HTTPException(status_code=404, detail="Resident not found")
+
+    # 2) Validate goal (shared goals are allowed: goal.resident_id may be NULL)
+    goal_obj = None
+    override = False
+    if transaction_in.goal_id is not None:
+        goal_obj = session.get(Goal, transaction_in.goal_id)
+        if not goal_obj:
+            raise HTTPException(status_code=404, detail="Goal not found")
+
+        # Compare provided points with goal default
+        if transaction_in.points != goal_obj.points:
+            override = True
+        else:
+            transaction_in.points = goal_obj.points
+
+    # 3) Normalize timestamp to UTC ('Z')
+    if transaction_in.timestamp is None:
+        ts_utc = datetime.now(timezone.utc)
     else:
-        from datetime import datetime, timezone
-        timestamp_utc = datetime.now(timezone.utc)
+        ts_utc = (
+            transaction_in.timestamp.replace(tzinfo=timezone.utc)
+            if transaction_in.timestamp.tzinfo is None
+            else transaction_in.timestamp.astimezone(timezone.utc)
+        )
 
-
-    transaction = Transaction(
+    # 4) Build transaction
+    tx = Transaction(
         resident_id=transaction_in.resident_id,
         goal_id=transaction_in.goal_id,
         points=transaction_in.points,
-        timestamp=timestamp_utc,
+        timestamp=ts_utc,
         staff_name=transaction_in.staff_name,
         note=transaction_in.note,
+        override_points=override,
     )
 
-    # Update resident's token balance
-    resident = session.get(Resident, transaction.resident_id)
-    if not resident:
-        raise HTTPException(status_code=404, detail="Resident not found")
-    resident.token_balance += transaction.points
+    # 5) Apply points to resident balance
+    resident.token_balance = (resident.token_balance or 0) + tx.points
 
-    session.add(transaction)
-    session.add(resident)
+    # 6) Commit atomically
+    session.add_all([tx, resident])
     session.commit()
-    session.refresh(transaction)
-    return transaction
+    session.refresh(tx)
 
-@app.get("/transactions/", response_model=List[TransactionRead], summary="List all transactions")
+    # 7) Optionally include goal title in response
+    response_data = {
+        "id": tx.id,
+        "resident_id": tx.resident_id,
+        "goal_id": tx.goal_id,
+        "goal_title": goal_obj.title if goal_obj else None,
+        "points": tx.points,
+        "override_points": tx.override_points,
+        "timestamp": tx.timestamp,
+        "staff_name": tx.staff_name,
+        "note": tx.note,
+    }
+    return response_data
+
+@app.get("/transaction/", response_model=List[TransactionRead], summary="List all transactions")
 def list_transactions(session: Session = Depends(get_session)):
     transactions = session.exec(select(Transaction)).all()
-    # Ensure timestamps are UTC
+    result = []
+
     for tx in transactions:
+        # Ensure timestamps are UTC
         if tx.timestamp.tzinfo is None:
             tx.timestamp = tx.timestamp.replace(tzinfo=timezone.utc)
         else:
             tx.timestamp = tx.timestamp.astimezone(timezone.utc)
-    return transactions
 
-@app.get("/transactions/resident/{resident_id}", response_model=List[TransactionRead], summary="List transactions for a resident")
+        # Fetch goal title (if goal_id exists)
+        goal_title = None
+        if tx.goal_id:
+            goal = session.get(Goal, tx.goal_id)
+            goal_title = goal.title if goal else None
+
+        # Append with goal title and override flag
+        resident = session.get(Resident, tx.resident_id)
+
+        tx_data = TransactionRead(
+            id=tx.id,
+            resident_id=tx.resident_id,
+            resident_display_name=resident.display_name if resident else None,
+            goal_id=tx.goal_id,
+            goal_title=goal_title,
+            points=tx.points,
+            override_points=tx.override_points,
+            timestamp=tx.timestamp,
+            staff_name=tx.staff_name,
+            note=tx.note,
+        )
+        result.append(tx_data)
+
+    return result
+
+@app.get(
+    "/transaction/resident/{resident_id}",
+    response_model=List[TransactionRead],
+    summary="List transactions for a specific resident",
+)
 def transactions_for_resident(resident_id: int, session: Session = Depends(get_session)):
+    """
+    List all transactions for a resident, with UTC timestamps,
+    goal titles, override flags, and resident display name.
+    """
     transactions = session.exec(
         select(Transaction).where(Transaction.resident_id == resident_id)
     ).all()
+
+    result = []
+    resident = session.get(Resident, resident_id)  # ✅ lookup once per resident
+
     for tx in transactions:
+        # Ensure timestamp is UTC
         if tx.timestamp.tzinfo is None:
             tx.timestamp = tx.timestamp.replace(tzinfo=timezone.utc)
         else:
             tx.timestamp = tx.timestamp.astimezone(timezone.utc)
-    return transactions
+
+        # Fetch goal title if applicable
+        goal_title = None
+        if tx.goal_id:
+            goal = session.get(Goal, tx.goal_id)
+            goal_title = goal.title if goal else None
+
+        # Build response model
+        tx_data = TransactionRead(
+            id=tx.id,
+            resident_id=tx.resident_id,
+            resident_display_name=resident.display_name if resident else None,  # ✅ fix here
+            goal_id=tx.goal_id,
+            goal_title=goal_title,
+            points=tx.points,
+            override_points=tx.override_points,
+            timestamp=tx.timestamp,
+            staff_name=tx.staff_name,
+            note=tx.note,
+        )
+        result.append(tx_data)
+
+    return result
+
 
 # ------------------------------
 # Goal Update/Delete endpoints
 # ------------------------------
 
-@app.put("/transactions/{transaction_id}", response_model=TransactionRead, summary="Update a transaction (partial)")
+@app.put("/transaction/{transaction_id}", response_model=TransactionRead, summary="Update a transaction (partial)")
 def update_transaction(
     transaction_id: int,
     updated_data: TransactionUpdate,
@@ -220,7 +331,7 @@ def update_transaction(
     return transaction
 
 
-@app.delete("/transactions/{transaction_id}", summary="Delete a transaction")
+@app.delete("/transaction/{transaction_id}", summary="Delete a transaction")
 def delete_transaction(transaction_id: int, session: Session = Depends(get_session)):
     transaction = session.get(Transaction, transaction_id)
     if not transaction:

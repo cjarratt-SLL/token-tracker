@@ -1,27 +1,14 @@
 import React, { useEffect, useState } from "react";
-import { fetchTransactions, fetchResidents, fetchGoals } from "./api";
+import { fetchTransactions } from "./api";
 
-const TransactionList = ({ onTransactionAdded }) => {
+const TransactionList = () => {
   const [transactions, setTransactions] = useState([]);
-  const [residents, setResidents] = useState({});
-  const [goals, setGoals] = useState({});
   const [loading, setLoading] = useState(true);
 
-  const loadData = async () => {
+  const loadTransactions = async () => {
     try {
-      const [txData, resData, goalData] = await Promise.all([
-        fetchTransactions(),
-        fetchResidents(),
-        fetchGoals(),
-      ]);
-
-      // Convert arrays to lookup maps for display
-      const residentMap = Object.fromEntries(resData.map(r => [r.id, r.display_name]));
-      const goalMap = Object.fromEntries(goalData.map(g => [g.id, g.title]));
-
-      setResidents(residentMap);
-      setGoals(goalMap);
-      setTransactions(txData);
+      const data = await fetchTransactions();
+      setTransactions(data);
     } catch (err) {
       console.error("Error loading transactions:", err);
     } finally {
@@ -29,44 +16,56 @@ const TransactionList = ({ onTransactionAdded }) => {
     }
   };
 
-  // This will run on load
   useEffect(() => {
-    loadData();
+    loadTransactions();
   }, []);
-
-  // If triggered from App.jsx after posting a new transaction, reload
-  useEffect(() => {
-    if (onTransactionAdded) {
-      loadData();
-    }
-  }, [onTransactionAdded]);
 
   if (loading) return <p>Loading transactions...</p>;
   if (transactions.length === 0) return <p>No transactions recorded yet.</p>;
 
   return (
-    <div className="transactions-list">
-      <h2>Transaction Log</h2>
-      <table border="1" cellPadding="6" style={{ margin: "auto", borderCollapse: "collapse" }}>
+    <div className="transactions-list" style={{ marginTop: "30px" }}>
+      <h2>Transaction History</h2>
+      <table
+        border="1"
+        cellPadding="6"
+        style={{
+          margin: "auto",
+          borderCollapse: "collapse",
+          minWidth: "80%",
+          fontFamily: "Segoe UI, Arial, sans-serif",
+        }}
+      >
         <thead>
-          <tr>
+          <tr style={{ background: "#f3f3f3" }}>
             <th>Resident</th>
             <th>Goal</th>
             <th>Points</th>
-            <th>Staff</th>
             <th>Note</th>
+            <th>Staff</th>
             <th>Timestamp (UTC)</th>
           </tr>
         </thead>
         <tbody>
           {transactions.map((tx) => (
             <tr key={tx.id}>
-              <td>{residents[tx.resident_id] || tx.resident_id}</td>
-              <td>{tx.goal_id ? goals[tx.goal_id] : "—"}</td>
-              <td style={{ color: tx.points >= 0 ? "green" : "red" }}>{tx.points}</td>
-              <td>{tx.staff_name || "—"}</td>
+              <td>{tx.resident_display_name || "Unknown Resident"}</td>
+              <td>{tx.goal_title || "—"}</td>
+              <td
+                style={{
+                  color: tx.points >= 0 ? "green" : "red",
+                  fontWeight: tx.override_points ? "bold" : "normal",
+                }}
+              >
+                {tx.points} pts {tx.override_points ? "(override)" : ""}
+              </td>
               <td>{tx.note || "—"}</td>
-              <td>{new Date(tx.timestamp).toLocaleString("en-US", { timeZone: "UTC" })}</td>
+              <td>{tx.staff_name || "—"}</td>
+              <td>
+                {new Date(tx.timestamp).toLocaleString("en-US", {
+                  timeZone: "UTC",
+                })}
+              </td>
             </tr>
           ))}
         </tbody>

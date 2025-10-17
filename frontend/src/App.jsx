@@ -7,7 +7,6 @@ import TransactionForm from "./TransactionForm";
 import TransactionList from "./TransactionList";
 import ResidentDashboard from "./ResidentDashboard";
 import { fetchResidents, fetchGoals } from "./api";
-import ResidentPopup from "./ResidentPopup";
 import "./App.css";
 
 
@@ -62,13 +61,6 @@ function App() {
 
       {/* View transaction history */}
       <TransactionList onTransactionAdded={handleTransactionAdded} />
-
-      {/* Popup demo for testing */}
-      <div style={{ marginTop: "40px" }}>
-        <h2>Resident Popups (Preview)</h2>
-        <ResidentPopup residentId={5} />
-        <ResidentPopup residentId={6} />
-      </div>
 
       {/* Resident Dashboard */}
       <ResidentDashboard />

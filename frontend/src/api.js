@@ -1,50 +1,50 @@
 import axios from "axios";
 
-const API_BASE = "http://localhost:8000"; // FastAPI backend
+// ✅ FastAPI backend base URL
+const API_BASE = "http://127.0.0.1:8000";
 
-// ✅ Fetch all residents
+// =====================
+// Residents
+// =====================
 export const fetchResidents = async () => {
-  const response = await axios.get(`${API_BASE}/residents/`);
+  const response = await axios.get(`${API_BASE}/resident/`);
   return response.data;
 };
 
-// ✅ Create a new resident
 export const createResident = async (residentData) => {
-  const response = await axios.post(`${API_BASE}/residents/`, residentData);
+  const response = await axios.post(`${API_BASE}/resident/`, residentData);
   return response.data;
 };
 
-// ✅ Fetch all goals
+// =====================
+// Goals
+// =====================
 export const fetchGoals = async () => {
-  const response = await axios.get(`${API_BASE}/goals/`);
+  const response = await axios.get(`${API_BASE}/goal/`);
   return response.data;
 };
 
-// ✅ Create a new goal
 export const createGoal = async (goalData) => {
-  const response = await axios.post(`${API_BASE}/goals/`, goalData);
+  const response = await axios.post(`${API_BASE}/goal/`, goalData);
   return response.data;
 };
 
-// ✅ Fetch all transactions
+// =====================
+// Transactions
+// =====================
 export const fetchTransactions = async () => {
-  const response = await axios.get(`${API_BASE}/transactions/`);
+  const response = await axios.get(`${API_BASE}/transaction/`);
   return response.data;
 };
 
-// ✅ Create a new transaction
-// tx should look like:
-// { resident_id: number, goal_id?: number, points: number, note?: string, staff_name?: string, timestamp?: string }
-// If timestamp is omitted, the backend will set it to UTC automatically.
-// If you include it, use: new Date().toISOString()  // includes the trailing 'Z'
 export const createTransaction = async (tx) => {
   const payload = {
     ...tx,
-    // If a timestamp is provided as a Date, convert to ISO with Z
+    // Normalize timestamp if given
     ...(tx.timestamp instanceof Date
       ? { timestamp: tx.timestamp.toISOString() }
       : {}),
   };
-  const response = await axios.post(`${API_BASE}/transactions/`, payload);
+  const response = await axios.post(`${API_BASE}/transaction/`, payload);
   return response.data;
 };

@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { fetchResidents, fetchTransactions, fetchGoals } from "./api";
-import ResidentModal from "./ResidentModal";
 
 const ResidentsList = () => {
   const [residents, setResidents] = useState([]);

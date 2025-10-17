@@ -1,8 +1,9 @@
 ﻿# models.py
-from sqlmodel import SQLModel, Field
-from typing import Optional
+from sqlmodel import SQLModel, Field, Relationship
+from typing import Optional, List
 from datetime import datetime, timezone
 from pydantic import BaseModel, field_validator
+
 
 # -------------------------
 # Database models
@@ -11,24 +12,40 @@ class Resident(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     first_name: str
     last_name: str
-    display_name: str
-    token_balance: int = 0
+    display_name: Optional[str] = None
+    token_balance: int = Field(default=0)
+
+    # Relationships
+    goals: List["Goal"] = Relationship(back_populates="resident")
+    transactions: List["Transaction"] = Relationship(back_populates="resident")
+
 
 class Goal(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     title: str
     description: Optional[str] = None
-    points: int = 1
-    active: bool = True
+    points: int
+    active: bool = Field(default=True)
+    resident_id: Optional[int] = Field(default=None, foreign_key="resident.id")
+
+    # Relationships
+    resident: Optional["Resident"] = Relationship(back_populates="goals")
+    transactions: List["Transaction"] = Relationship(back_populates="goal")
+
 
 class Transaction(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     resident_id: int = Field(foreign_key="resident.id")
     goal_id: Optional[int] = Field(default=None, foreign_key="goal.id")
     points: int
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
     staff_name: Optional[str] = None
     note: Optional[str] = None
+    override_points: bool = Field(default=False)  # ✅ new flag
+
+    # Relationships
+    resident: "Resident" = Relationship(back_populates="transactions")
+    goal: Optional["Goal"] = Relationship(back_populates="transactions")
 
 
 # -------------------------
@@ -40,11 +57,13 @@ class ResidentUpdate(BaseModel):
     display_name: Optional[str] = None
     token_balance: Optional[int] = None
 
+
 class GoalUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     points: Optional[int] = None
     active: Optional[bool] = None
+
 
 class TransactionCreate(BaseModel):
     resident_id: int
@@ -57,50 +76,38 @@ class TransactionCreate(BaseModel):
     @field_validator("timestamp", mode="before")
     @classmethod
     def ensure_utc(cls, v):
-        """
-        Ensure the timestamp is parsed and stored as UTC.
-        Accepts:
-          - None → current UTC time
-          - str (ISO 8601, with or without 'Z')
-          - datetime → will be converted to UTC if naive or non-UTC
-        """
         if v is None:
             return datetime.now(timezone.utc)
-
-        # Handle datetime directly
         if isinstance(v, datetime):
             return v.astimezone(timezone.utc) if v.tzinfo else v.replace(tzinfo=timezone.utc)
-
-        # Handle strings (ISO 8601, possibly ending with 'Z')
         if isinstance(v, str):
-            s = v.strip()
-            if s.endswith("Z"):
-                s = s[:-1] + "+00:00"
-            try:
-                dt = datetime.fromisoformat(s)
-            except Exception as exc:
-                raise ValueError(
-                    "timestamp must be ISO 8601 (e.g. 2025-10-14T15:37:41Z)"
-                ) from exc
+            s = v.strip().replace("Z", "+00:00")
+            dt = datetime.fromisoformat(s)
             return dt.astimezone(timezone.utc) if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
-
         raise ValueError("Invalid timestamp type; must be None, str, or datetime")
+
 
 class TransactionRead(BaseModel):
     id: int
     resident_id: int
+    resident_display_name: Optional[str] = None
     goal_id: Optional[int]
+    goal_title: Optional[str] = None   # ✅ show goal title in API response
     points: int
+    override_points: Optional[bool] = False   # ✅ indicate if manual override happened
     timestamp: datetime
     staff_name: Optional[str]
     note: Optional[str]
 
-    model_config = {"from_attributes": True}  # Pydantic V2 compatible
+    model_config = {"from_attributes": True}
+
+
 
 class TransactionUpdate(BaseModel):
     resident_id: Optional[int] = None
     goal_id: Optional[int] = None
     points: Optional[int] = None
+    override_points: Optional[bool] = None   # ✅ added so staff can toggle it if needed
     timestamp: Optional[datetime] = None
     staff_name: Optional[str] = None
     note: Optional[str] = None

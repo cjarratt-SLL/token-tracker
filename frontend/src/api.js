@@ -1,18 +1,18 @@
 import axios from "axios";
 
 // ✅ FastAPI backend base URL
-export const API_BASE_URL = "https://token-tracker-backend-td80.onrender.com";
+export const API_BASE_URL = import.meta.env.VITE_API_BASE;
 
 // =====================
 // Residents
 // =====================
 export const fetchResidents = async () => {
-  const response = await axios.get(`${API_BASE}/resident/`);
+  const response = await axios.get(`${API_BASE_URL}/resident/`);
   return response.data;
 };
 
 export const createResident = async (residentData) => {
-  const response = await axios.post(`${API_BASE}/resident/`, residentData);
+  const response = await axios.post(`${API_BASE_URL}/resident/`, residentData);
   return response.data;
 };
 
@@ -20,12 +20,12 @@ export const createResident = async (residentData) => {
 // Goals
 // =====================
 export const fetchGoals = async () => {
-  const response = await axios.get(`${API_BASE}/goal/`);
+  const response = await axios.get(`${API_BASE_URL}/goal/`);
   return response.data;
 };
 
 export const createGoal = async (goalData) => {
-  const response = await axios.post(`${API_BASE}/goal/`, goalData);
+  const response = await axios.post(`${API_BASE_URL}/goal/`, goalData);
   return response.data;
 };
 
@@ -33,7 +33,7 @@ export const createGoal = async (goalData) => {
 // Transactions
 // =====================
 export const fetchTransactions = async () => {
-  const response = await axios.get(`${API_BASE}/transaction/`);
+  const response = await axios.get(`${API_BASE_URL}/transaction/`);
   return response.data;
 };
 
@@ -45,6 +45,6 @@ export const createTransaction = async (tx) => {
       ? { timestamp: tx.timestamp.toISOString() }
       : {}),
   };
-  const response = await axios.post(`${API_BASE}/transaction/`, payload);
+  const response = await axios.post(`${API_BASE_URL}/transaction/`, payload);
   return response.data;
 };

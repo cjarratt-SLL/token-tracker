@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { createTransaction, fetchResidents, fetchGoals } from "./api";
 
-const TransactionForm = ({ onTransactionAdded }) => {
+const TransactionForm = ({ onSuccess }) => {
   const [residents, setResidents] = useState([]);
   const [goals, setGoals] = useState([]);
   const [formData, setFormData] = useState({
@@ -52,7 +52,7 @@ const handleSubmit = async (e) => {
       note: "",
     });
 
-    if (onTransactionAdded) onTransactionAdded();
+    if (onSuccess) onSuccess();
   } catch (err) {
     console.error("❌ Error creating transaction:", err);
     alert("Failed to record transaction. Check console for details.");

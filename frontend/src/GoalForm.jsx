@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { createGoal } from "./api";
 
-const GoalForm = ({ onGoalAdded }) => {
+const GoalForm = ({ onSuccess }) => {
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -22,7 +22,7 @@ const GoalForm = ({ onGoalAdded }) => {
     try {
       await createGoal(formData);
       setFormData({ title: "", description: "", points: 1, active: true });
-      onGoalAdded();
+      onSuccess();
     } catch (err) {
       console.error("Error creating goal:", err);
       alert("Failed to create goal. Check console for details.");

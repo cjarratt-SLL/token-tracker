@@ -134,23 +134,25 @@ def delete_goal(goal_id: int, session: Session = Depends(get_session)):
 # ----------------------------------------
 @app.post("/transaction/", response_model=Transaction, summary="Create a new transaction and update resident balance")
 def create_transaction(transaction: Transaction, session: Session = Depends(get_session)):
-    # 1️⃣ Add the new transaction
-    session.add(transaction)
-
-    # 2️⃣ Find the related resident
+    # 1️⃣ Find the resident first
     resident = session.get(Resident, transaction.resident_id)
     if not resident:
         raise HTTPException(status_code=404, detail="Resident not found")
 
-    # 3️⃣ Update their balance (you can adjust this logic if you ever allow negative points)
+    # 2️⃣ Create the new transaction and adjust balance
+    db_transaction = Transaction.from_orm(transaction)
     resident.token_balance += transaction.points
 
-    # 4️⃣ Commit both changes
-    session.add(resident)
-    session.commit()
-    session.refresh(transaction)
+    # 3️⃣ Add both objects to the same session BEFORE commit
+    session.add_all([db_transaction, resident])
 
-    return transaction
+    # 4️⃣ Commit once to persist both changes
+    session.commit()
+
+    # 5️⃣ Refresh the transaction so the response is current
+    session.refresh(db_transaction)
+
+    return db_transaction
 
 
 

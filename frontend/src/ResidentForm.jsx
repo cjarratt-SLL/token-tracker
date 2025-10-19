@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { createResident } from "./api";
 
-const ResidentForm = ({ onResidentAdded }) => {
+const ResidentForm = ({ onSuccess }) => {
   const [formData, setFormData] = useState({
     first_name: "",
     last_name: "",
@@ -18,7 +18,7 @@ const ResidentForm = ({ onResidentAdded }) => {
     e.preventDefault();
     try {
       await createResident(formData);
-      onResidentAdded(); // Refresh list after adding
+      if (onSuccess) onSuccess(); // Refresh list after adding
       setFormData({ first_name: "", last_name: "", display_name: "", token_balance: 0 });
     } catch (err) {
       console.error("Error creating resident:", err);

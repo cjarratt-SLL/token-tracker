@@ -31,7 +31,6 @@ const ResidentDashboard = () => {
 
     return (
     <div style={{ textAlign: "center", padding: "20px" }}>
-      <h2 style={{ color: "#333", marginBottom: "20px" }}>Resident Dashboard</h2>
 
       <div
         style={{

@@ -34,30 +34,34 @@ const TransactionForm = ({ onTransactionAdded }) => {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      await createTransaction({
-        ...formData,
-        points: Number(formData.points),
-      });
-      setFormData({
-        resident_id: "",
-        goal_id: "",
-        points: 0,
-        staff_name: "",
-        note: "",
-      });
-      if (onTransactionAdded) onTransactionAdded();
-    } catch (err) {
-      console.error("Error creating transaction:", err);
-      alert("Failed to record transaction. Check console for details.");
-    }
-  };
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  try {
+    await createTransaction({
+      ...formData,
+      points: Number(formData.points),
+    });
+
+    alert("✅ Transaction successfully recorded!"); // <— added line
+
+    setFormData({
+      resident_id: "",
+      goal_id: "",
+      points: 0,
+      staff_name: "",
+      note: "",
+    });
+
+    if (onTransactionAdded) onTransactionAdded();
+  } catch (err) {
+    console.error("❌ Error creating transaction:", err);
+    alert("Failed to record transaction. Check console for details.");
+  }
+};
+
 
   return (
     <form onSubmit={handleSubmit} className="transaction-form">
-      <h2>Record Token Transaction</h2>
 
       <label>Resident:</label>
       <select

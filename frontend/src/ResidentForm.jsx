@@ -28,7 +28,6 @@ const ResidentForm = ({ onResidentAdded }) => {
 
   return (
     <form onSubmit={handleSubmit} className="resident-form">
-      <h2>Add New Resident</h2>
       <input
         type="text"
         name="first_name"

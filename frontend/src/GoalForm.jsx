@@ -31,7 +31,6 @@ const GoalForm = ({ onGoalAdded }) => {
 
   return (
     <form onSubmit={handleSubmit} className="goal-form">
-      <h2>Add New Goal</h2>
       <input
         type="text"
         name="title"

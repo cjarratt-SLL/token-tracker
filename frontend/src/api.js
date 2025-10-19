@@ -1,8 +1,7 @@
 import axios from "axios";
 
 // ✅ FastAPI backend base URL
-const API_BASE = "https://token-tracker-backend.onrender.com";
-export default API_BASE;
+export const API_BASE_URL = "https://token-tracker-backend-td80.onrender.com";
 
 // =====================
 // Residents

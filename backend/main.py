@@ -8,8 +8,8 @@ from fastapi import Body, Depends, FastAPI, HTTPException, Path
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 
-from backend.database import get_session, init_db
-from backend.models import Resident, Goal, Transaction
+from database import get_session, init_db
+from models import Resident, Goal, Transaction
 
 # ----------------------------------------
 # App + lifespan

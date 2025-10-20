@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { createTransaction, fetchResidents, fetchGoals } from "./api";
 
 const TransactionForm = ({ onSuccess }) => {
@@ -7,12 +7,13 @@ const TransactionForm = ({ onSuccess }) => {
   const [formData, setFormData] = useState({
     resident_id: "",
     goal_id: "",
-    points: 0,
     staff_name: "",
     note: "",
+    points: "", // empty until a goal is chosen
   });
+  const [pointsModified, setPointsModified] = useState(false);
 
-  // Load residents and goals when the component mounts
+  // Load residents & goals
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -29,40 +30,82 @@ const TransactionForm = ({ onSuccess }) => {
     loadData();
   }, []);
 
+  // Find the selected goal
+  const selectedGoal = useMemo(() => {
+    if (!formData.goal_id) return null;
+    const gid = Number(formData.goal_id);
+    return goals.find((g) => Number(g.id) === gid) || null;
+  }, [formData.goal_id, goals]);
+
+  // When goal changes, auto-fill its points and mark unmodified
+  useEffect(() => {
+    if (selectedGoal) {
+      setFormData((prev) => ({ ...prev, points: String(selectedGoal.points ?? "") }));
+      setPointsModified(false);
+    } else {
+      setFormData((prev) => ({ ...prev, points: "" }));
+      setPointsModified(false);
+    }
+  }, [selectedGoal]);
+
+  // Generic change handler
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  try {
-    await createTransaction({
-      ...formData,
-      points: Number(formData.points),
-    });
+  // Points change handler — detects override
+  const handlePointsChange = (e) => {
+    const value = e.target.value;
+    setFormData((prev) => ({ ...prev, points: value }));
 
-    alert("✅ Transaction successfully recorded!"); // <— added line
+    if (selectedGoal && value !== "") {
+      const numeric = Number(value);
+      const defaultPts = Number(selectedGoal.points ?? 0);
+      setPointsModified(numeric !== defaultPts);
+    } else {
+      setPointsModified(false);
+    }
+  };
 
-    setFormData({
-      resident_id: "",
-      goal_id: "",
-      points: 0,
-      staff_name: "",
-      note: "",
-    });
+  // Submit transaction
+  const handleSubmit = async (e) => {
+    e.preventDefault();
 
-    if (onSuccess) onSuccess();
-  } catch (err) {
-    console.error("❌ Error creating transaction:", err);
-    alert("Failed to record transaction. Check console for details.");
-  }
-};
+    const payload = {
+      resident_id: Number(formData.resident_id),
+      goal_id: formData.goal_id ? Number(formData.goal_id) : null,
+      staff_name: formData.staff_name,
+      note: formData.note?.trim() || "",
+    };
 
+    // Only send points if user modified them
+    if (pointsModified && formData.points !== "") {
+      payload.points = Number(formData.points);
+    }
+
+    try {
+      await createTransaction(payload);
+      alert("✅ Transaction successfully recorded!");
+
+      // Reset form
+      setFormData({
+        resident_id: "",
+        goal_id: "",
+        staff_name: "",
+        note: "",
+        points: "",
+      });
+      setPointsModified(false);
+      onSuccess?.();
+    } catch (err) {
+      console.error("❌ Error creating transaction:", err);
+      alert("Failed to record transaction. Check console for details.");
+    }
+  };
 
   return (
     <form onSubmit={handleSubmit} className="transaction-form">
-
       <label>Resident:</label>
       <select
         name="resident_id"
@@ -78,28 +121,41 @@ const handleSubmit = async (e) => {
         ))}
       </select>
 
-      <label>Goal (optional):</label>
+      <label>Goal:</label>
       <select
         name="goal_id"
         value={formData.goal_id}
         onChange={handleChange}
+        required
       >
-        <option value="">None</option>
+        <option value="">Select Goal</option>
         {goals.map((g) => (
           <option key={g.id} value={g.id}>
-            {g.title}
+            {g.title} ({g.points} pts)
           </option>
         ))}
       </select>
 
-      <label>Points (positive or negative):</label>
+      <label>Points:</label>
       <input
         type="number"
         name="points"
         value={formData.points}
-        onChange={handleChange}
-        required
+        onChange={handlePointsChange}
+        disabled={!selectedGoal}
+        placeholder={
+          selectedGoal
+            ? `Default: ${selectedGoal.points}`
+            : "Select a goal first"
+        }
       />
+      <small style={{ color: "#777" }}>
+        {!selectedGoal
+          ? "Points will auto-fill when a goal is selected."
+          : pointsModified
+          ? `Modified by staff (default was ${selectedGoal.points})`
+          : `Using goal default: ${selectedGoal.points}`}
+      </small>
 
       <label>Staff Name:</label>
       <input
@@ -107,6 +163,7 @@ const handleSubmit = async (e) => {
         name="staff_name"
         value={formData.staff_name}
         onChange={handleChange}
+        required
       />
 
       <label>Note (optional):</label>

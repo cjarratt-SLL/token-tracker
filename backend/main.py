@@ -134,25 +134,35 @@ def delete_goal(goal_id: int, session: Session = Depends(get_session)):
 # ----------------------------------------
 @app.post("/transaction/", response_model=Transaction, summary="Create a new transaction and update resident balance")
 def create_transaction(transaction: Transaction, session: Session = Depends(get_session)):
-    # 1️⃣ Find the resident first
-    resident = session.get(Resident, transaction.resident_id)
-    if not resident:
-        raise HTTPException(status_code=404, detail="Resident not found")
+    try:
+        # 1️⃣ Find the resident first
+        resident = session.get(Resident, transaction.resident_id)
+        if not resident:
+            raise HTTPException(status_code=404, detail="Resident not found")
 
-    # 2️⃣ Create the new transaction and adjust balance
-    db_transaction = Transaction.from_orm(transaction)
-    resident.token_balance += transaction.points
+        # 2️⃣ Create the new transaction and adjust balance
+        db_transaction = Transaction.from_orm(transaction)
+        resident.token_balance += transaction.points
 
-    # 3️⃣ Add both objects to the same session BEFORE commit
-    session.add_all([db_transaction, resident])
+        # 3️⃣ Add both objects to the same session BEFORE commit
+        session.add_all([db_transaction, resident])
 
-    # 4️⃣ Commit once to persist both changes
-    session.commit()
+        # 4️⃣ Commit once to persist both changes
+        session.commit()
 
-    # 5️⃣ Refresh the transaction so the response is current
-    session.refresh(db_transaction)
+        # 5️⃣ Refresh the transaction so the response is current
+        session.refresh(db_transaction)
 
-    return db_transaction
+        return db_transaction
+
+    except Exception as e:
+        # 🔒 Rollback ensures no partial updates happen
+        session.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Transaction failed and rolled back: {str(e)}"
+        )
+
 
 
 

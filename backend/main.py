@@ -135,33 +135,48 @@ def delete_goal(goal_id: int, session: Session = Depends(get_session)):
 @app.post("/transaction/", response_model=Transaction, summary="Create a new transaction and update resident balance")
 def create_transaction(transaction: Transaction, session: Session = Depends(get_session)):
     try:
-        # 1️⃣ Find the resident first
+        # 1️⃣ Fetch the related Resident and Goal
         resident = session.get(Resident, transaction.resident_id)
         if not resident:
             raise HTTPException(status_code=404, detail="Resident not found")
 
-        # 2️⃣ Create the new transaction and adjust balance
-        db_transaction = Transaction.from_orm(transaction)
-        resident.token_balance += transaction.points
+        goal = session.get(Goal, transaction.goal_id)
+        if not goal:
+            raise HTTPException(status_code=404, detail="Goal not found")
 
-        # 3️⃣ Add both objects to the same session BEFORE commit
+        # 2️⃣ Determine points value
+        # Use the goal’s default points if not provided in the transaction
+        points_value = transaction.points if transaction.points is not None else goal.points
+
+        # 3️⃣ Create a new Transaction record
+        db_transaction = Transaction(
+            resident_id=transaction.resident_id,
+            goal_id=transaction.goal_id,
+            staff_name=transaction.staff_name,  # ✅ include staff name
+            points=points_value,
+            note=getattr(transaction, "note", None)  # optional field
+        )
+
+        # 4️⃣ Update the resident’s token balance
+        resident.token_balance += points_value
+
+        # 5️⃣ Save both updates atomically
         session.add_all([db_transaction, resident])
-
-        # 4️⃣ Commit once to persist both changes
         session.commit()
 
-        # 5️⃣ Refresh the transaction so the response is current
+        # 6️⃣ Refresh and return the transaction
         session.refresh(db_transaction)
-
         return db_transaction
 
     except Exception as e:
-        # 🔒 Rollback ensures no partial updates happen
+        # 🔒 Roll back any partial changes if an error occurs
         session.rollback()
         raise HTTPException(
             status_code=500,
             detail=f"Transaction failed and rolled back: {str(e)}"
         )
+
+
 
 
 
